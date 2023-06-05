@@ -1,4 +1,4 @@
-package sii
+package gosii
 
 type CaptchaResp struct {
 	TxtCaptcha string `json:"txtCaptcha"`

@@ -1,4 +1,4 @@
-package sii
+package gosii
 
 import (
 	"errors"

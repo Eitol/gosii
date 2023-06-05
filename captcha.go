@@ -3,6 +3,7 @@ package gosii
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 // siiCaptchaURL is the URL from where the CAPTCHA is fetched.
 var siiCaptchaURL = "https://zeus.sii.cl/cvc_cgi/stc/CViewCaptcha.cgi"
+var ErrMaxCaptchaAttempts = errors.New("max captcha attempts reached")
 
 type Captcha struct {
 	Text     string `json:"text"`
@@ -36,6 +38,20 @@ type Captcha struct {
 // Please note that this method relies on the structure of SII's captcha service and its response.
 // If the service URL or the response structure changes, this method may not work as expected.
 func fetchCaptcha() (*Captcha, error) {
+	remAttempts := 3
+	for {
+		captcha, err := fetchCaptchaAtt()
+		if err == nil {
+			return captcha, nil
+		}
+		remAttempts--
+		if remAttempts == 0 {
+			return nil, ErrMaxCaptchaAttempts
+		}
+	}
+}
+
+func fetchCaptchaAtt() (*Captcha, error) {
 	resp, err := http.DefaultClient.Post(
 		siiCaptchaURL, "application/json", strings.NewReader("oper=0"),
 	)
@@ -58,6 +74,9 @@ func fetchCaptcha() (*Captcha, error) {
 func solveCaptcha(err error, txtCaptcha string) (*Captcha, error) {
 	code, err := base64.StdEncoding.DecodeString(txtCaptcha)
 	if err != nil {
+		return nil, err
+	}
+	if len(code) < 40 {
 		return nil, err
 	}
 	code = code[36:40]

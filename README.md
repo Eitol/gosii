@@ -27,7 +27,9 @@ func main() {
 	rutExample := "5.126.663-3" // RUT de Sebastian Piñera
 	ssiClient := gosii.NewClient()
 	citizen, err := ssiClient.GetNameByRUT(rutExample)
-	if err != nil {  panic(err)  }
+    if err != nil {
+        panic(err)
+    }
 	fmt.Println(citizen.Name)
 	// Output: MIGUEL JUAN SEBASTIAN PINERA ECHENIQUE
 	
@@ -38,9 +40,8 @@ func main() {
 }   
 ```
 
-### How it Works
-![Servicio de Impuestos Internos](docs/process.png)
 
+### How it Works
 The library works by making HTTP requests to the SII's web services and parsing the responses. The flow can be summarized in the following steps:
 
 1- Fetch a captcha challenge from SII's service (necessary for making requests).
@@ -56,4 +57,4 @@ To solve the captcha, the library decodes a base64 encoded string provided by SI
 
 ### Note
 
-The Software is provided for academic purposes only
+The Software is provided for academic purposes only. Commercial use is not permitted.

@@ -54,6 +54,7 @@ A crucial step in this process is fetching and solving the captcha challenge.
 
 To solve the captcha, the library decodes a base64 encoded string provided by SII's service, which includes the captcha solution.
 
+![flow](docs/process.png)
 
 ### Note
 

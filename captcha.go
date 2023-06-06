@@ -41,7 +41,7 @@ func fetchCaptcha() (*Captcha, error) {
 	remAttempts := 3
 	for {
 		captcha, err := fetchCaptchaAtt()
-		if err == nil {
+		if err == nil && captcha != nil && captcha.Text != "" {
 			return captcha, nil
 		}
 		remAttempts--

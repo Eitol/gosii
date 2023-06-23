@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -19,6 +20,24 @@ const (
 )
 
 var ErrNotFound = errors.New("not found")
+var ErrCaptcha = errors.New("not found")
+
+type siiHTTPClient struct {
+	captcha      *Captcha
+	captchaMutex sync.Mutex
+	opts         Opts
+}
+
+type Opts struct {
+	OnNewCaptcha func(captcha *Captcha)
+}
+
+func NewClient(opts *Opts) Client {
+	if opts == nil {
+		opts = &Opts{}
+	}
+	return &siiHTTPClient{opts: *opts}
+}
 
 // GetNameByRUT fetches the name of a citizen from the Servicio de Impuestos Internos (SII)
 // of Chile given the RUT (Rol Único Tributario), a unique tax number of the citizen.
@@ -41,11 +60,34 @@ var ErrNotFound = errors.New("not found")
 // Please note that this method relies on the structure of SII's service and its response.
 // If the service URL or the response structure changes, this method may not work as expected.
 func (c *siiHTTPClient) GetNameByRUT(rut string) (*Citizen, error) {
-	fetchedData, err := fetchCaptcha()
+	err := c.assertCaptcha()
 	if err != nil {
 		return nil, err
 	}
-	return c.getUserByRUTAndCaptcha(rut, *fetchedData)
+	v, err := c.getUserByRUTAndCaptcha(rut, *c.captcha)
+	if err != nil {
+		if errors.Is(err, ErrCaptcha) {
+			c.captcha = nil
+			return c.GetNameByRUT(rut)
+		}
+	}
+	return v, err
+}
+
+func (c *siiHTTPClient) assertCaptcha() error {
+	c.captchaMutex.Lock()
+	if c.captcha == nil {
+		newCaptcha, err := fetchCaptcha()
+		if err != nil {
+			return err
+		}
+		if c.opts.OnNewCaptcha != nil {
+			c.opts.OnNewCaptcha(newCaptcha)
+		}
+		c.captcha = newCaptcha
+	}
+	c.captchaMutex.Unlock()
+	return nil
 }
 
 // fetchCaptcha fetches a captcha from the SII's service.
@@ -90,6 +132,11 @@ func (c *siiHTTPClient) parseSIIHTMLResponse(html string) (*Citizen, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 	if err != nil {
 		return nil, err
+	}
+
+	if strings.Contains(html, "Por favor reingrese Captcha") {
+		c.captcha = nil
+		return nil, ErrCaptcha
 	}
 
 	razonSocial := strings.TrimSpace(doc.Find(XpathRazonSocial).Text())

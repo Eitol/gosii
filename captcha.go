@@ -20,6 +20,9 @@ type Captcha struct {
 
 // fetchCaptcha is responsible for retrieving a captcha challenge from the SII's service.
 //
+// The captcha can be reused for multiple requests, as long as the captcha is not expired.
+// The captcha is considered expired after 1 minute.
+//
 // The method makes a POST request to the SII's captcha service with the "oper=0" payload,
 // which instructs the service to generate a new captcha.
 //
@@ -68,18 +71,18 @@ func fetchCaptchaAtt() (*Captcha, error) {
 		return nil, err
 	}
 	txtCaptcha := captchaResp.TxtCaptcha
-	return solveCaptcha(err, txtCaptcha)
+	return solveCaptcha(txtCaptcha)
 }
 
-func solveCaptcha(err error, txtCaptcha string) (*Captcha, error) {
-	code, err := base64.StdEncoding.DecodeString(txtCaptcha)
+func solveCaptcha(txtCaptcha string) (*Captcha, error) {
+	decodedCaptcha, err := base64.StdEncoding.DecodeString(txtCaptcha)
 	if err != nil {
 		return nil, err
 	}
-	if len(code) < 40 {
+	if len(decodedCaptcha) < 40 {
 		return nil, err
 	}
-	code = code[36:40]
+	solution := decodedCaptcha[36:40]
 
-	return &Captcha{Text: txtCaptcha, Solution: string(code)}, nil
+	return &Captcha{Text: txtCaptcha, Solution: string(solution)}, nil
 }

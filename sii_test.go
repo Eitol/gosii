@@ -5,7 +5,7 @@ import (
 )
 
 func TestConsulta_GetNameByRUT(t *testing.T) {
-	ssiClient := NewClient()
+	ssiClient := NewClient(nil)
 	data, err := ssiClient.GetNameByRUT("5.126.663-3")
 	checkResultOk(t, err, data)
 
@@ -15,7 +15,7 @@ func TestConsulta_GetNameByRUT(t *testing.T) {
 	data, err = ssiClient.GetNameByRUT("51266633")
 	checkResultOk(t, err, data)
 
-	data, err = ssiClient.GetNameByRUT("51266633111")
+	_, err = ssiClient.GetNameByRUT("51266633111")
 	if err == nil {
 		t.Errorf("GetNameByRUT() error = %v", err)
 	}

@@ -11,6 +11,7 @@ type CommercialActivity struct {
 
 type Citizen struct {
 	Rut        string               `json:"rut"`
+	Run        string               `json:"run"`
 	Name       string               `json:"name"`
 	Activities []CommercialActivity `json:"activities"`
 }

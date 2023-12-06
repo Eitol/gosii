@@ -108,7 +108,12 @@ func (c *siiHTTPClient) getUserByRUTAndCaptcha(rut string, captcha Captcha) (*Ci
 	if err != nil {
 		return nil, err
 	}
-	return c.parseSIIHTMLResponse(string(body))
+	ctz, err := c.parseSIIHTMLResponse(string(body))
+	if err != nil {
+		return nil, err
+	}
+	ctz.Rut = rut
+	return ctz, nil
 }
 
 func (c *siiHTTPClient) buildRequest(rut string, captcha Captcha) (*http.Request, error) {

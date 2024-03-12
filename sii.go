@@ -1,9 +1,11 @@
 package gosii
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,6 +19,10 @@ var httpClient = &http.Client{
 	Transport: &http.Transport{
 		// Definir InsecureSkipVerify como true desactiva la verificación SSL
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			dialer := &net.Dialer{}
+			return tls.DialWithDialer(dialer, network, addr, &tls.Config{InsecureSkipVerify: true})
+		},
 	},
 }
 

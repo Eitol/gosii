@@ -1,6 +1,7 @@
 package gosii
 
 import (
+	"crypto/tls"
 	"errors"
 	"io"
 	"net/http"
@@ -11,6 +12,13 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+var httpClient = &http.Client{
+	Transport: &http.Transport{
+		// Definir InsecureSkipVerify como true desactiva la verificación SSL
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	},
+}
 
 const (
 	XpathRazonSocial = "html body div div:nth-child(4)"
@@ -96,7 +104,7 @@ func (c *siiHTTPClient) getUserByRUTAndCaptcha(rut string, captcha Captcha) (*Ci
 	if err != nil {
 		return nil, err
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net/http"
 	"strings"
 )
 
@@ -55,7 +54,7 @@ func fetchCaptcha() (*Captcha, error) {
 }
 
 func fetchCaptchaAtt() (*Captcha, error) {
-	resp, err := http.DefaultClient.Post(
+	resp, err := httpClient.Post(
 		siiCaptchaURL, "application/json", strings.NewReader("oper=0"),
 	)
 	if err != nil {

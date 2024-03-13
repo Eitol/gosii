@@ -38,7 +38,7 @@ var ErrCaptcha = errors.New("not found")
 
 type siiHTTPClient struct {
 	captcha      *Captcha
-	captchaMutex sync.RWMutex
+	captchaMutex sync.Mutex
 	opts         Opts
 }
 
@@ -74,21 +74,17 @@ func NewClient(opts *Opts) Client {
 // Please note that this method relies on the structure of SII's service and its response.
 // If the service URL or the response structure changes, this method may not work as expected.
 func (c *siiHTTPClient) GetNameByRUT(rut string) (*Citizen, error) {
-	err := c.assertCaptcha()
+	captcha, err := c.assertCaptcha()
 	if err != nil {
 		return nil, err
 	}
-	c.captchaMutex.RLock()
-	if c.captcha == nil {
-		c.captchaMutex.RUnlock()
-		return c.GetNameByRUT(rut)
-	}
-	v, err := c.getUserByRUTAndCaptcha(rut, *c.captcha)
-	c.captchaMutex.RUnlock()
+	v, err := c.getUserByRUTAndCaptcha(rut, *captcha)
 	if err != nil {
 		if errors.Is(err, ErrCaptcha) {
 			c.captchaMutex.Lock()
-			c.captcha = nil
+			if c.captcha != nil && c.captcha.Text == captcha.Text {
+				c.captcha = nil
+			}
 			c.captchaMutex.Unlock()
 			return c.GetNameByRUT(rut)
 		}
@@ -96,20 +92,20 @@ func (c *siiHTTPClient) GetNameByRUT(rut string) (*Citizen, error) {
 	return v, err
 }
 
-func (c *siiHTTPClient) assertCaptcha() error {
+func (c *siiHTTPClient) assertCaptcha() (*Captcha, error) {
 	c.captchaMutex.Lock()
 	defer c.captchaMutex.Unlock()
 	if c.captcha == nil {
 		newCaptcha, err := fetchCaptcha()
 		if err != nil {
-			return err
+			return nil, err
 		}
+		c.captcha = newCaptcha
 		if c.opts.OnNewCaptcha != nil {
 			c.opts.OnNewCaptcha(newCaptcha)
 		}
-		c.captcha = newCaptcha
 	}
-	return nil
+	return c.captcha, nil
 }
 
 // fetchCaptcha fetches a captcha from the SII's service.

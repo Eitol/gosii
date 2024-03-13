@@ -38,7 +38,7 @@ var ErrCaptcha = errors.New("not found")
 
 type siiHTTPClient struct {
 	captcha      *Captcha
-	captchaMutex sync.Mutex
+	captchaMutex sync.RWMutex
 	opts         Opts
 }
 
@@ -78,10 +78,18 @@ func (c *siiHTTPClient) GetNameByRUT(rut string) (*Citizen, error) {
 	if err != nil {
 		return nil, err
 	}
+	c.captchaMutex.RLock()
+	if c.captcha == nil {
+		c.captchaMutex.RUnlock()
+		return c.GetNameByRUT(rut)
+	}
 	v, err := c.getUserByRUTAndCaptcha(rut, *c.captcha)
+	c.captchaMutex.RUnlock()
 	if err != nil {
 		if errors.Is(err, ErrCaptcha) {
+			c.captchaMutex.Lock()
 			c.captcha = nil
+			c.captchaMutex.Unlock()
 			return c.GetNameByRUT(rut)
 		}
 	}
@@ -90,6 +98,7 @@ func (c *siiHTTPClient) GetNameByRUT(rut string) (*Citizen, error) {
 
 func (c *siiHTTPClient) assertCaptcha() error {
 	c.captchaMutex.Lock()
+	defer c.captchaMutex.Unlock()
 	if c.captcha == nil {
 		newCaptcha, err := fetchCaptcha()
 		if err != nil {
@@ -100,7 +109,6 @@ func (c *siiHTTPClient) assertCaptcha() error {
 		}
 		c.captcha = newCaptcha
 	}
-	c.captchaMutex.Unlock()
 	return nil
 }
 

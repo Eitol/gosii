@@ -105,7 +105,10 @@ func (c *siiHTTPClient) assertCaptcha() (*Captcha, error) {
 			c.opts.OnNewCaptcha(newCaptcha)
 		}
 	}
-	return c.captcha, nil
+	return &Captcha{
+		Text:     c.captcha.Text,
+		Solution: c.captcha.Solution,
+	}, nil
 }
 
 // fetchCaptcha fetches a captcha from the SII's service.
@@ -158,7 +161,6 @@ func (c *siiHTTPClient) parseSIIHTMLResponse(html string) (*Citizen, error) {
 	}
 
 	if strings.Contains(html, "Por favor reingrese Captcha") {
-		c.captcha = nil
 		return nil, ErrCaptcha
 	}
 

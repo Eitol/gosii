@@ -1,34 +1,23 @@
 package gosii
 
 import (
-	"context"
-	"crypto/tls"
+	_ "embed"
 	"errors"
 	"io"
-	"net"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
-var httpClient = &http.Client{
-	Transport: &http.Transport{
-		// Definir InsecureSkipVerify como true desactiva la verificación SSL
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			dialer := &net.Dialer{}
-			return tls.DialWithDialer(dialer, network, addr, &tls.Config{InsecureSkipVerify: true})
-		},
-	},
-}
-
 const (
-	XpathRazonSocial = "html body div div:nth-child(4)"
-	XpathActivities  = "html body div table tr"
+	xpathRazonSocial = "html body div div:nth-child(4)"
+	xpathActivities  = "html body div table tr"
 
 	siiNameByRUTURL = "https://zeus.sii.cl/cvc_cgi/stc/getstc"
 )
@@ -40,6 +29,8 @@ type siiHTTPClient struct {
 	captcha      *Captcha
 	captchaMutex sync.Mutex
 	opts         Opts
+	httpClient   *http.Client
+	requestCount atomic.Uint64
 }
 
 type Opts struct {
@@ -47,10 +38,12 @@ type Opts struct {
 }
 
 func NewClient(opts *Opts) Client {
+	httpClient := buildHTTPClient()
+
 	if opts == nil {
 		opts = &Opts{}
 	}
-	return &siiHTTPClient{opts: *opts}
+	return &siiHTTPClient{opts: *opts, httpClient: httpClient}
 }
 
 // GetNameByRUT fetches the name of a citizen from the Servicio de Impuestos Internos (SII)
@@ -73,13 +66,16 @@ func NewClient(opts *Opts) Client {
 //
 // Please note that this method relies on the structure of SII's service and its response.
 // If the service URL or the response structure changes, this method may not work as expected.
-func (c *siiHTTPClient) GetNameByRUT(rut string) (*Citizen, error) {
+func (c *siiHTTPClient) GetNameByRUT(rut string) (*Citizen, *RequestMetadata, error) {
 	captcha, err := c.assertCaptcha()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	v, err := c.getUserByRUTAndCaptcha(rut, *captcha)
+	citizen, meta, err := c.getUserByRUTAndCaptcha(rut, *captcha)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, nil, ErrNotFound
+		}
 		if errors.Is(err, ErrCaptcha) {
 			c.captchaMutex.Lock()
 			if c.captcha != nil && c.captcha.Text == captcha.Text {
@@ -89,14 +85,14 @@ func (c *siiHTTPClient) GetNameByRUT(rut string) (*Citizen, error) {
 			return c.GetNameByRUT(rut)
 		}
 	}
-	return v, err
+	return citizen, &meta, err
 }
 
 func (c *siiHTTPClient) assertCaptcha() (*Captcha, error) {
 	c.captchaMutex.Lock()
 	defer c.captchaMutex.Unlock()
 	if c.captcha == nil {
-		newCaptcha, err := fetchCaptcha()
+		newCaptcha, err := c.fetchCaptcha()
 		if err != nil {
 			return nil, err
 		}
@@ -112,29 +108,61 @@ func (c *siiHTTPClient) assertCaptcha() (*Captcha, error) {
 }
 
 // fetchCaptcha fetches a captcha from the SII's service.
-func (c *siiHTTPClient) getUserByRUTAndCaptcha(rut string, captcha Captcha) (*Citizen, error) {
-	req, err := c.buildRequest(rut, captcha)
-	if err != nil {
-		return nil, err
-	}
-	res, err := httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
+func (c *siiHTTPClient) getUserByRUTAndCaptcha(rut string, captcha Captcha) (*Citizen, RequestMetadata, error) {
+	attempts := 3
+	var err error
+	var body []byte
+	var requestTimes []time.Duration
+	for attempts > 0 {
+		// time btwn 0 and 8 seconds
+		awaitSecondsTime := time.Duration(rand.Intn(8)) * time.Second
+		var req *http.Request
+		req, err = c.buildRequest(rut, captcha)
+		if err != nil {
+			break
+		}
+		var res *http.Response
+		c.requestCount.Add(1)
+		startTime := time.Now()
+		res, err = c.httpClient.Do(req)
+		endTime := time.Since(startTime)
+		requestTimes = append(requestTimes, endTime)
+		if err != nil {
+			attempts--
+			time.Sleep(awaitSecondsTime)
+			continue
+		}
+		body, err = io.ReadAll(res.Body)
 		_ = res.Body.Close()
-	}()
-
-	body, err := io.ReadAll(res.Body)
+		if err != nil {
+			attempts--
+			time.Sleep(awaitSecondsTime)
+			continue
+		}
+		break
+	}
+	avgTime := float64(0)
+	for _, t := range requestTimes {
+		avgTime += float64(t)
+	}
+	avgTime = avgTime / float64(len(requestTimes))
+	meta := RequestMetadata{
+		TotalCount: int(c.requestCount.Load()),
+		AvgTime:    avgTime,
+		Attempts:   3 - attempts,
+	}
 	if err != nil {
-		return nil, err
+		return nil, meta, err
 	}
 	ctz, err := c.parseSIIHTMLResponse(string(body))
 	if err != nil {
-		return nil, err
+		if strings.Contains(string(body), "**") {
+			return nil, meta, ErrNotFound
+		}
+		return nil, meta, err
 	}
 	ctz.Rut = rut
-	return ctz, nil
+	return ctz, meta, nil
 }
 
 func (c *siiHTTPClient) buildRequest(rut string, captcha Captcha) (*http.Request, error) {
@@ -164,13 +192,13 @@ func (c *siiHTTPClient) parseSIIHTMLResponse(html string) (*Citizen, error) {
 		return nil, ErrCaptcha
 	}
 
-	razonSocial := strings.TrimSpace(doc.Find(XpathRazonSocial).Text())
+	razonSocial := strings.TrimSpace(doc.Find(xpathRazonSocial).Text())
 	if razonSocial == "" || razonSocial == "**" {
 		return nil, ErrNotFound
 	}
 	var actividades []CommercialActivity
 
-	doc.Find(XpathActivities).Each(func(i int, s *goquery.Selection) {
+	doc.Find(xpathActivities).Each(func(i int, s *goquery.Selection) {
 		if i > 0 {
 			codigo := s.Find("td:nth-child(2) font").Text()
 			var codeInt int

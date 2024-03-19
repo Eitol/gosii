@@ -39,10 +39,10 @@ type Captcha struct {
 //
 // Please note that this method relies on the structure of SII's captcha service and its response.
 // If the service URL or the response structure changes, this method may not work as expected.
-func fetchCaptcha() (*Captcha, error) {
+func (c *siiHTTPClient) fetchCaptcha() (*Captcha, error) {
 	remAttempts := 3
 	for {
-		captcha, err := fetchCaptchaAtt()
+		captcha, err := c.fetchCaptchaAtt()
 		if err == nil && captcha != nil && captcha.Text != "" {
 			return captcha, nil
 		}
@@ -53,8 +53,9 @@ func fetchCaptcha() (*Captcha, error) {
 	}
 }
 
-func fetchCaptchaAtt() (*Captcha, error) {
-	resp, err := httpClient.Post(
+func (c *siiHTTPClient) fetchCaptchaAtt() (*Captcha, error) {
+	c.requestCount.Add(1)
+	resp, err := c.httpClient.Post(
 		siiCaptchaURL, "application/json", strings.NewReader("oper=0"),
 	)
 	if err != nil {

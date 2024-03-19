@@ -6,16 +6,21 @@ import (
 
 func TestConsulta_GetNameByRUT(t *testing.T) {
 	ssiClient := NewClient(nil)
-	data, err := ssiClient.GetNameByRUT("5.126.663-3")
+	data, _, err := ssiClient.GetNameByRUT("5.126.663-3")
 	checkResultOk(t, err, data)
 
-	data, err = ssiClient.GetNameByRUT("5126.6633")
+	data, _, err = ssiClient.GetNameByRUT("5126.6633")
 	checkResultOk(t, err, data)
 
-	data, err = ssiClient.GetNameByRUT("51266633")
+	data, _, err = ssiClient.GetNameByRUT("51266633")
 	checkResultOk(t, err, data)
 
-	_, err = ssiClient.GetNameByRUT("51266633111")
+	_, _, err = ssiClient.GetNameByRUT("51266633111")
+	if err == nil {
+		t.Errorf("GetNameByRUT() error = %v", err)
+	}
+
+	_, _, err = ssiClient.GetNameByRUT("22779893-9")
 	if err == nil {
 		t.Errorf("GetNameByRUT() error = %v", err)
 	}

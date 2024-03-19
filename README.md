@@ -56,6 +56,8 @@ To solve the captcha, the library decodes a base64 encoded string provided by SI
 
 ![flow](docs/process.png)
 
+echo | openssl s_client -servername zeus.sii.cl -connect zeus.sii.cl:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > zeus_sii.pem
+
 ### Note
 
 The Software is provided for academic purposes only. Commercial use is not permitted.
